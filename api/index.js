@@ -1,3 +1,5 @@
+const https = require('https');
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -19,23 +21,35 @@ module.exports = async (req, res) => {
   const googleScriptUrl = `https://script.google.com/macros/s/AKfycbwil1Pw4edQcLthPIEqVQorCYvWsiRzlYYrpXD2oGBoUNlcT8vigoU6VFFeRn8otp3SVQ/exec?username=${encodeURIComponent(username)}`;
 
   try {
-    const response = await fetch(googleScriptUrl, { 
-      redirect: 'follow',
-      headers: { 'Accept': 'application/json' }
+    // Make request using native Node https module with redirect handling
+    const rawData = await new Promise((resolve, reject) => {
+      https.get(googleScriptUrl, (resp) => {
+        // Handle Google Apps Script 302/303 Redirects automatically
+        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+          https.get(resp.headers.location, (redirectResp) => {
+            let data = '';
+            redirectResp.on('data', (chunk) => { data += chunk; });
+            redirectResp.on('end', () => resolve(data));
+          }).on('error', reject);
+          return;
+        }
+
+        let data = '';
+        resp.on('data', (chunk) => { data += chunk; });
+        resp.on('end', () => resolve(data));
+      }).on('error', (err) => reject(err));
     });
-    
-    const rawText = await response.text();
 
     // Check if Google returned an HTML page instead of JSON
-    if (!rawText || rawText.trim().startsWith('<')) {
+    if (!rawData || rawData.trim().startsWith('<')) {
       return res.status(502).json({
         found: false,
         error: 'Google Apps Script returned an HTML page instead of JSON.',
-        rawSnippet: rawText.substring(0, 150)
+        rawSnippet: rawData.substring(0, 100)
       });
     }
 
-    const json = JSON.parse(rawText);
+    const json = JSON.parse(rawData);
 
     if (json.success && Array.isArray(json.data) && json.data.length > 0) {
       return res.status(200).json({
@@ -51,12 +65,10 @@ module.exports = async (req, res) => {
     });
 
   } catch (error) {
-    // 🔍 This will expose the exact error message on your front-end/client
     return res.status(500).json({ 
       found: false, 
-      error: 'Vercel Function Caught an Error',
-      message: error.message,
-      stack: error.stack 
+      error: 'Vercel Function Error',
+      message: error.message 
     });
   }
 };
