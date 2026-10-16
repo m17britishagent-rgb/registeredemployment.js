@@ -4,92 +4,67 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
-    return res.status(204).end();
+    return res.status(200).end();
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({
-      found: false,
-      error: 'Method not allowed'
-    });
-  }
-
-  const username = String(req.query?.username || '').trim();
+  const { username } = req.query;
 
   if (!username) {
-    return res.status(400).json({
-      found: false,
-      error: 'Missing required query parameter: username'
+    return res.status(400).json({ 
+      found: false, 
+      error: 'Missing required query parameter: username' 
     });
   }
 
-  const googleScriptUrl =
-    'https://script.google.com/macros/s/AKfycbwil1Pw4edQcLthPIEqVQorCYvWsiRzlYYrpXD2oGBoUNlcT8vigoU6VFFeRn8otp3SVQ/exec';
+  // 👇 PASTE YOUR NEW GOOGLE APPS SCRIPT URL HERE 👇
+  const googleScriptUrl = `https://script.google.com/macros/s/YOUR_NEW_DEPLOYMENT_ID_HERE/exec?username=${encodeURIComponent(username)}`;
 
   try {
-    const url = new URL(googleScriptUrl);
-    url.searchParams.set('username', username);
-
-    const response = await fetch(url.toString(), {
-      method: 'GET',
+    const response = await fetch(googleScriptUrl, { 
       redirect: 'follow',
-      headers: {
-        Accept: 'application/json'
-      },
-      signal: AbortSignal.timeout(20000)
+      headers: { 'Accept': 'application/json' }
     });
-
+    
     const rawText = await response.text();
 
-    if (!response.ok) {
-      console.error('Google HTTP status:', response.status);
-      console.error('Google response:', rawText.slice(0, 500));
-
+    // Check if Google returned an HTML page instead of JSON
+    if (!rawText || rawText.trim().startsWith('<')) {
       return res.status(502).json({
         found: false,
-        error: 'Google Apps Script returned an HTTP error',
-        upstreamStatus: response.status,
-        details: rawText.slice(0, 300)
+        error: 'Google Apps Script returned an HTML page instead of JSON. Ensure deployment permission is set to "Anyone".'
       });
     }
 
     let json;
-
     try {
       json = JSON.parse(rawText);
-    } catch (error) {
-      console.error('Invalid Google response:', rawText.slice(0, 500));
-
+    } catch (parseError) {
       return res.status(502).json({
         found: false,
-        error: 'Google returned a non-JSON response. Check deployment access and script execution logs.',
-        responsePreview: rawText.slice(0, 200)
+        error: 'Failed to parse response from Google Apps Script as JSON.',
+        raw: rawText.substring(0, 200)
       });
     }
 
-    if (json.success === true && Array.isArray(json.data)) {
+    // Check if records exist and return the full array
+    if (json.success && Array.isArray(json.data) && json.data.length > 0) {
       return res.status(200).json({
-        found: json.data.length > 0,
-        count: json.data.length,
-        records: json.data
+        found: true,
+        count: json.count || json.data.length,
+        records: json.data // Passes all events back to the client
       });
     }
 
     return res.status(200).json({
       found: false,
-      count: 0,
-      message: json.message || json.error || 'User not found'
+      message: "User not found on blacklist."
     });
 
   } catch (error) {
-    console.error('Google Apps Script request failed:', error);
-
-    return res.status(502).json({
-      found: false,
+    return res.status(500).json({ 
+      found: false, 
       error: 'Failed to reach Google Apps Script endpoint',
-      details: error.name === 'TimeoutError'
-        ? 'Google Apps Script request timed out'
-        : error.message
+      details: error.message 
     });
   }
 };
