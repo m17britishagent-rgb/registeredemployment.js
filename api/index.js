@@ -16,8 +16,7 @@ module.exports = async (req, res) => {
     });
   }
 
-  // 👇 PASTE YOUR NEW GOOGLE APPS SCRIPT URL HERE 👇
-  const googleScriptUrl = `https://script.google.com/macros/s/YOUR_NEW_DEPLOYMENT_ID_HERE/exec?username=${encodeURIComponent(username)}`;
+  const googleScriptUrl = `https://script.google.com/macros/s/AKfycbwil1Pw4edQcLthPIEqVQorCYvWsiRzlYYrpXD2oGBoUNlcT8vigoU6VFFeRn8otp3SVQ/exec?username=${encodeURIComponent(username)}`;
 
   try {
     const response = await fetch(googleScriptUrl, { 
@@ -31,27 +30,18 @@ module.exports = async (req, res) => {
     if (!rawText || rawText.trim().startsWith('<')) {
       return res.status(502).json({
         found: false,
-        error: 'Google Apps Script returned an HTML page instead of JSON. Ensure deployment permission is set to "Anyone".'
+        error: 'Google Apps Script returned an HTML page instead of JSON.',
+        rawSnippet: rawText.substring(0, 150)
       });
     }
 
-    let json;
-    try {
-      json = JSON.parse(rawText);
-    } catch (parseError) {
-      return res.status(502).json({
-        found: false,
-        error: 'Failed to parse response from Google Apps Script as JSON.',
-        raw: rawText.substring(0, 200)
-      });
-    }
+    const json = JSON.parse(rawText);
 
-    // Check if records exist and return the full array
     if (json.success && Array.isArray(json.data) && json.data.length > 0) {
       return res.status(200).json({
         found: true,
         count: json.count || json.data.length,
-        records: json.data // Passes all events back to the client
+        records: json.data
       });
     }
 
@@ -61,10 +51,12 @@ module.exports = async (req, res) => {
     });
 
   } catch (error) {
+    // 🔍 This will expose the exact error message on your front-end/client
     return res.status(500).json({ 
       found: false, 
-      error: 'Failed to reach Google Apps Script endpoint',
-      details: error.message 
+      error: 'Vercel Function Caught an Error',
+      message: error.message,
+      stack: error.stack 
     });
   }
 };
