@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
     });
   }
 
-  const googleScriptUrl = `https://script.google.com/macros/s/AKfycbx1ZAmQ2N-e5MoNmO7pDgYwoPgYsCl9NMlg2BpCmT46WcKM00SRI7Xmd4oEvhTsnipr/exec?username=${encodeURIComponent(username)}`;
+  const googleScriptUrl = `https://script.google.com/macros/s/AKfycbwil1Pw4edQcLthPIEqVQorCYvWsiRzlYYrpXD2oGBoUNlcT8vigoU6VFFeRn8otp3SVQ/exec?username=${encodeURIComponent(username)}`;
 
   try {
     const response = await fetch(googleScriptUrl, { 
